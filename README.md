@@ -9,6 +9,8 @@ Consolidated General Election, built from the cast vote record. It has three tab
   which guide each voter matched best, and where voters broke with each guide.
 - **Voter clusters:** k-means groups of voters who voted alike, how each group voted, where
   each group lives, and which guides each group followed.
+- **Coalition builder:** pick any combination of choices and see how many mail voters made all
+  of them, which neighborhoods they live in, and how they voted on everything else.
 
 **Live site:** https://zachlipton.github.io/sf-ballotomatic/
 
@@ -34,6 +36,10 @@ precomputed and embedded in `index.html`; there is no server.
 - Endorsements come from the [SF Voter Guide Comparison](https://lizziesiegle.com/sf-voter-guides/)
   (compiled from [SF Endorsements](https://sfendorsements.com/) and the guides' own pages),
   with the SF Chronicle's checked against its published endorsements.
+
+- The coalition builder loads ballot-level mail data (`coalition.bin`) located only to one of
+  SF's analysis neighborhoods; ballots in small neighborhood groups carry no location, and
+  results are shown only for coalitions of at least 100 ballots.
 
 Results are preliminary and change as more ballots are counted. The page shows the
 report and the time of the CVR export it was built from.
