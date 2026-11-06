@@ -176,6 +176,9 @@ td.tot { font-weight: 650; color: var(--ink-2); }
 .cond button { border: 0; background: color-mix(in oklab, var(--paper) 22%, transparent); color: var(--paper); width: 24px; height: 24px;
   border-radius: 50%; cursor: pointer; font-size: 15px; line-height: 1; flex: none; }
 .cond .and { font-weight: 400; opacity: .7; }
+.coalhead { display: grid; gap: 10px; }
+.coalhead .base { margin: -4px 0 0; }
+.coalhead:has(#cHead:empty) { display: none; }
 .coalbar { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: baseline; }
 .palette { display: grid; gap: 10px; }
 #cPalette { max-height: min(380px, 55vh); overflow-y: auto; border: 1px solid var(--rule); border-radius: 8px; padding: 4px 14px 14px; overscroll-behavior: contain; }
@@ -455,6 +458,11 @@ footer p { margin: 0; }
   <section class="ask" aria-label="Build a coalition">
     <p class="q">Voters who…</p>
     <div class="coal" id="cConds" aria-live="polite"></div>
+    <div class="coalhead" aria-live="polite">
+      <p class="headline" id="cHead"></p>
+      <p class="base" id="cBase"></p>
+      <p class="crossnote mailnote"></p>
+    </div>
     <div class="coalbar">
       <button class="textbtn" id="cClear" type="button">Start over</button>
       <button class="textbtn" id="cExample" type="button">Try an example</button>
@@ -464,12 +472,6 @@ footer p { margin: 0; }
       <input type="search" id="cSearch" placeholder="Find a contest or candidate">
       <div id="cPalette"></div>
     </div>
-  </section>
-
-  <section class="answer" aria-live="polite">
-    <p class="crossnote mailnote"></p>
-    <p class="headline" id="cHead"></p>
-    <p class="base" id="cBase"></p>
   </section>
 
   <section class="full" aria-label="Where the coalition lives" id="cMapSec">
