@@ -283,6 +283,7 @@ footer p { margin: 0; }
 }
 .tip strong { display: block; font-size: 16px; }
 .tip .tiphead { margin-top: 7px; font-weight: 700; }
+.mref { text-decoration: underline dotted color-mix(in oklab, currentColor 45%, transparent); text-underline-offset: 3px; text-decoration-thickness: 1px; cursor: help; }
 .tip ul { margin: 3px 0 0; padding-left: 16px; }
 .tip li { margin: 1px 0; }
 
@@ -483,7 +484,7 @@ footer p { margin: 0; }
 
   <section class="full" aria-label="How the coalition voted" id="cVoteSec">
     <div class="full-head"><h2>How the coalition voted on everything else</h2></div>
-    <p class="note">The coalition's most common choice in each contest, compared with all mail voters, among ballots that voted in that contest. Sorted by the biggest difference.</p>
+    <p class="note">The coalition's most common choice in each contest (and, in races with three or more candidates, every candidate with at least 9%), compared with all mail voters, among ballots that voted in that contest. Sorted by the biggest difference.</p>
     <div class="scroll"><table id="cVotes" class="ctable"></table></div>
   </section>
   </div>
@@ -731,6 +732,9 @@ const DATA = {"election":"November 3, 2026 Consolidated General Election","repor
     coalition: "Pick choices from anywhere on the ballot to see the voters who made all of them: how many there are, where they live, and how they voted on everything else.",
   };
   function render() {
+    Promise.resolve(renderView()).then(() => markMeasures($(`view-${state.tab}`)));
+  }
+  function renderView() {
     for (const t of TABS) {
       $(`view-${t}`).hidden = state.tab !== t;
       const a = $(`tab-${t}`);
@@ -741,8 +745,7 @@ const DATA = {"election":"November 3, 2026 Consolidated General Election","repor
     if (state.tab !== "cross") {
       writeHash();
       for (const t of TABS) $(`tab-${t}`).href = tabHash(t);
-      ({ guides: renderGuides, clusters: renderClusters, coalition: renderCoalition })[state.tab]();
-      return;
+      return ({ guides: renderGuides, clusters: renderClusters, coalition: renderCoalition })[state.tab]();
     }
     syncControls();
     writeHash();
@@ -936,11 +939,12 @@ const DATA = {"election":"November 3, 2026 Consolidated General Election","repor
     DATA.districts.forEach((d, i) => { if (d !== "Unknown") sel.append(new Option(`Supervisor ${d}`, String(i))); });
   }
   // a hand-picked readable label for a choice: "YES on G", "Becerra"
-  const titleCase = s => s.toLowerCase().replace(/(^|[\s(\-"])([a-z])/g, (m, a, b) => a + b.toUpperCase())
-    .replace(/\bMc([a-z])/g, (m, a) => "Mc" + a.toUpperCase());
+  const titleCase = s => s.toLowerCase().replace(/(^|[\s(\-".])([a-z])/g, (m, a, b) => a + b.toUpperCase())
+    .replace(/\bMc([a-z])/g, (m, a) => "Mc" + a.toUpperCase())
+    .replace(/\b(Ii|Iii|Iv)\b/g, m => m.toUpperCase());
   function shortChoice(c, name) {
     if (c.yesno) return `${name} on ${c.tag}`;
-    const t = titleCase(name.replace(/\s*\(.*?\)\s*/g, " ").replace(/".*?"/g, "").trim());
+    const t = titleCase(name.replace(/\s*\(.*?\)\s*/g, " ").replace(/".*?"/g, "").replace(/\s+/g, " ").trim());
     return t;
   }
 
@@ -1126,6 +1130,7 @@ const DATA = {"election":"November 3, 2026 Consolidated General Election","repor
       td.append(el("b", null, pct0(r.n / n) + (otherWay(r.c, r.pick) ? ` voted ${otherWay(r.c, r.pick)}` : "")), el("small", null, `${fmt(r.n)} ballots`));
     }
     const sc = el("div", "scroll"); sc.append(t); box.append(sc);
+    markMeasures(box);
     box.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }
 
@@ -1305,7 +1310,7 @@ const DATA = {"election":"November 3, 2026 Consolidated General Election","repor
       if (real.length < 2) continue;
       let rows = c.yesno ? real.filter(x => x.n === "YES")
         : real.map(x => ({ ...x, s: share(c.id, x.j).v })).sort((a, b) => b.s - a.s)
-            .filter((x, q) => q === 0 || (real.length > 2 && x.s >= 0.15));
+            .filter((x, q) => q === 0 || (real.length > 2 && x.s >= 0.09));
       if (!c.yesno && real.length === 2) rows = rows.slice(0, 1);
       rows.forEach((x, q) => {
         const tr = tb.insertRow();
@@ -1549,9 +1554,14 @@ const DATA = {"election":"November 3, 2026 Consolidated General Election","repor
         }
       }
       if (nCo < 50) return;
+      // the coalition's top choice; in races with three or more candidates, also every other
+      // candidate with at least 9% among the coalition or all mail voters
       const top = real.reduce((a, j) => (co[j] > co[a] ? j : a), real[0]);
-      const v = co[top] / nCo, a = all[top] / nAll;
-      rows.push({ c, name: c.choices[top], v, a, d: v - a, nCo });
+      const show = real.filter(j => j === top || (real.length > 2 && (co[j] / nCo >= 0.09 || all[j] / nAll >= 0.09)));
+      for (const j of show) {
+        const v = co[j] / nCo, a = all[j] / nAll;
+        rows.push({ c, name: c.choices[j], v, a, d: v - a, nCo });
+      }
     });
     rows.sort((x, y) => Math.abs(y.d) - Math.abs(x.d));
     const t = $("cVotes");
@@ -1647,11 +1657,85 @@ const DATA = {"election":"November 3, 2026 Consolidated General Election","repor
     }
   }
 
+  // ---------- measure titles on hover ----------
+  // short, plain titles: official ballot titles, or a plain description where the official
+  // title is a campaign name that doesn't say what the measure does
+  const MEASURE_TITLES = {
+    "Prop 1": "Bonds for affordable and veterans housing",
+    "Prop 2": "Increases the state's rainy day fund",
+    "Prop 3": "Makes the top state income tax rates permanent",
+    "Prop 4": "Repeals the ban on public financing of election campaigns",
+    "Prop 5": "Changes the recall process for statewide officers",
+    "Prop 37": "Home loans for middle-class buyers of new homes",
+    "Prop 38": "Bonds for immunology research",
+    "Prop 39": "Requires voter ID",
+    "Prop 40": "One-time tax on billionaires' wealth",
+    "Prop 41": "Pre-election audits and spending rules for new taxes",
+    "Prop 42": "Bans new taxes on wealth and savings",
+    "Prop 43": "Two-thirds vote for local special taxes",
+    "Prop 44": "Spending rules for nonprofit health clinics",
+    "Prop 45": "Fast-tracks environmental review for housing and infrastructure",
+    "RTM": "Regional transit sales tax",
+    "A": "Charter changes affecting city departments and commissions",
+    "B": "Creates a municipal finance corporation and public bank",
+    "C": "Contributions to the Housing Fund",
+    "D": "Changes to the ballot measure process",
+    "E": "City Administrator's authority over city contracting",
+    "F": "Changes to executive branch management",
+    "G": "Allows private vehicles on the Great Highway in Sunset Dunes Park",
+    "H": "Parcel tax for Muni operations",
+    "I": "Changes to the real property transfer tax",
+    "J": "Ends the foreclosure exemption from the transfer tax",
+  };
+  const measureName = tag => (/^Prop /.test(tag) ? tag.replace("Prop", "Proposition") : tag === "RTM" ? "Regional Transit Measure" : `Measure ${tag}`);
+  // "Proposition 40", "Prop 40", "Measure G", "Measure RTM", "YES on G", "NO on RTM"
+  const MREF = /\b(?:Prop(?:osition)? (\d{1,2})\b|Measure (RTM|[A-J])\b|(?<=\b(?:YES|NO|[Uu]ndervote|[Oo]vervote) )on (RTM|[A-J])\b|(?<=\b)on (RTM)\b)/g;
+  function markMeasures(root) {
+    if (!root) return;
+    const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode: n => (n.parentElement.closest("select, option, svg, script, style, .mref, input, textarea")
+        ? NodeFilter.FILTER_REJECT : (MREF.lastIndex = 0, MREF.test(n.data)) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP),
+    });
+    const nodes = [];
+    while (walk.nextNode()) nodes.push(walk.currentNode);
+    for (const n of nodes) {
+      const frag = document.createDocumentFragment();
+      let last = 0;
+      MREF.lastIndex = 0;
+      for (const m of n.data.matchAll(MREF)) {
+        const tag = m[1] ? `Prop ${m[1]}` : (m[2] || m[3] || m[4]);
+        if (!MEASURE_TITLES[tag]) continue;
+        frag.append(n.data.slice(last, m.index));
+        const sp = document.createElement("span");
+        sp.className = "mref"; sp.dataset.m = tag; sp.textContent = m[0];
+        frag.append(sp);
+        last = m.index + m[0].length;
+      }
+      if (!last) continue;
+      frag.append(n.data.slice(last));
+      n.replaceWith(frag);
+    }
+    // menus can't hold markup: give their options a native tooltip instead
+    root.querySelectorAll("option").forEach(o => {
+      const m = o.text.match(/^(?:Proposition (\d+)|Measure (RTM|[A-J]))$/);
+      const tag = m && (m[1] ? `Prop ${m[1]}` : m[2]);
+      if (tag && MEASURE_TITLES[tag]) o.title = `${o.text}: ${MEASURE_TITLES[tag]}`;
+    });
+  }
+  document.addEventListener("pointerover", ev => {
+    const m = ev.target.closest?.(".mref");
+    if (!m) return;
+    showTip(ev, { big: measureName(m.dataset.m), a: MEASURE_TITLES[m.dataset.m], b: "" });
+    const out = () => { hideTip(); m.removeEventListener("pointerleave", out); };
+    m.addEventListener("pointerleave", out);
+  });
+  document.addEventListener("pointermove", ev => { if (ev.target.closest?.(".mref")) moveTip(ev); });
+
   // ---------- tooltip ----------
   const tip = $("tip");
   function showTip(ev, d, fromFocus) {
     tip.replaceChildren(el("strong", null, d.big), el("div", null, d.a));
-    const sub = el("div", null, d.b); sub.style.opacity = ".75"; tip.append(sub);
+    if (d.b) { const sub = el("div", null, d.b); sub.style.opacity = ".75"; tip.append(sub); }
     if (d.list?.length) {
       tip.append(el("div", "tiphead", d.listHead));
       const ul = el("ul");
