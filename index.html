@@ -225,6 +225,17 @@ table.dtable th, table.dtable td { white-space: normal; }
 .hbar .trk .fill:first-child { border-radius: 4px 0 0 4px; }
 .hbar .trk .fill:only-child { border-radius: 0 4px 4px 0; }
 .hbar .val { font-variant-numeric: tabular-nums; text-align: right; color: var(--ink-2); }
+.ggrid { display: grid; grid-template-columns: minmax(120px, 1.1fr) repeat(4, minmax(110px, 1fr)); gap: 0 18px; min-width: 640px; }
+.ggrid > * { padding: 10px 0; border-bottom: 1px solid var(--rule); min-width: 0; }
+.ggrid .colh { font-size: 12.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 650; padding-top: 0; align-self: end; }
+.ggrid .gname { font-size: 14px; font-weight: 650; align-self: center; }
+.ggrid .gname small, .ggrid .cell small { display: block; font-weight: 400; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.ggrid .cell svg { display: block; width: 100%; height: auto; overflow: visible; font-family: var(--font); }
+.ggrid .none { color: var(--muted); font-size: 12px; align-self: center; }
+@media (max-width: 680px) {
+  .ggrid { grid-template-columns: 104px repeat(4, 120px); gap: 0 12px; min-width: 0; }
+  .ggrid .gname, .ggrid .colh:first-child { position: sticky; left: 0; z-index: 1; background: var(--paper); align-self: stretch; display: flex; flex-direction: column; justify-content: center; font-size: 13px; }
+}
 .multiples { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 18px 26px; }
 .multiples figure { margin: 0; }
 .multiples figcaption { font-size: 14px; font-weight: 650; margin-bottom: 4px; }
@@ -370,6 +381,13 @@ footer p { margin: 0; }
     <p class="note" id="gNote"></p>
   </section>
 
+  <section class="full" aria-label="Agreement with each guide">
+    <div class="full-head"><h2>How closely voters followed each guide</h2></div>
+    <p class="note" id="gHistNote"></p>
+    <div class="scroll"><div class="ggrid" id="gHist"></div></div>
+    <div class="divpanel" id="gDiverge" hidden aria-live="polite"></div>
+  </section>
+
   <section class="full" aria-label="Closest guide">
     <div class="full-head"><h2>Which guide each voter matched best</h2></div>
     <p class="scope"><span>Counting
@@ -388,15 +406,6 @@ footer p { margin: 0; }
     </p>
     <div class="plotwrap" id="gPair"></div>
     <p class="note">Each square is a group of ballots. Darker squares hold more voters. A ballot's spot is the share of each guide's positions it followed, among those it voted on.</p>
-  </section>
-
-  <section class="full" aria-label="Agreement with each guide">
-    <div class="full-head"><h2>How closely voters followed each guide</h2></div>
-    <p class="scope"><span>Counting
-      <label for="gCatB" hidden>Positions counted</label><select class="pick" id="gCatB"></select></span></p>
-    <p class="note" id="gHistNote"></p>
-    <div class="multiples" id="gHist"></div>
-    <div class="divpanel" id="gDiverge" hidden aria-live="polite"></div>
   </section>
 
   <section class="full" aria-label="What each guide recommended">
@@ -973,12 +982,10 @@ const DATA = {"election":"November 3, 2026 Consolidated General Election","repor
       if (!sel.options.length) GD.guides.forEach(g => sel.append(new Option(g.name, g.id)));
     }
     $("gx").value = state.gx; $("gy").value = state.gy;
-    for (const id of ["gCatA", "gCatB"]) {
-      const sel = $(id);
-      if (!sel.options.length) for (const [k, v] of Object.entries(CATS)) sel.append(new Option(v, k));
-      sel.value = state.cat;
-    }
-    for (const id of ["gDistrict", "gx", "gy", "gCatA", "gCatB"]) fit($(id));
+    const catSel = $("gCatA");
+    if (!catSel.options.length) for (const [k, v] of Object.entries(CATS)) catSel.append(new Option(v, k));
+    catSel.value = state.cat;
+    for (const id of ["gDistrict", "gx", "gy", "gCatA"]) fit($(id));
     const SC = guideStats(scopeDs(), state.cat).filter(s => s.shown);
     const hiddenNote = () => {
       const off = guideStats(scopeDs(), state.cat).filter(s => !s.shown).map(s => s.g.name);
@@ -986,7 +993,7 @@ const DATA = {"election":"November 3, 2026 Consolidated General Election","repor
     };
     $("gBestNote").textContent = "Each ballot counts toward the guide it agreed with most" +
       (state.cat === "all" ? "" : `, on ${CATS[state.cat]} only`) + ". A ballot tied between guides is split among them, so guides that made the same picks share those voters evenly. Guides with only a few positions are easier to match." + hiddenNote();
-    $("gHistNote").textContent = `Ballots by the share of the guide's ${state.cat === "all" ? "positions" : "positions on " + CATS[state.cat]} they followed among those they voted on, from 0% at left to 100% at right. Point at a bar to see where those voters broke with the guide; click it for the full list.` + hiddenNote();
+    $("gHistNote").textContent = "Each chart shows ballots by the share of the guide's positions they followed among those they voted on, from 0% at left to 100% at right; the orange bar is ballots that followed every one. Columns count all of a guide's positions, or only those on candidates, state propositions or local measures. Point at a bar to see where those voters broke with the guide; click it for the full list.";
     const ds = scopeDs();
     wholeNote(document.querySelector("#view-guides .mailnote"), ds);
     const S = guideStats(ds);
@@ -1045,7 +1052,7 @@ const DATA = {"election":"November 3, 2026 Consolidated General Election","repor
     }
 
     drawPair(ds);
-    drawHists(SC);
+    drawGrid(ds);
     renderPositions();
   }
 
@@ -1134,15 +1141,34 @@ const DATA = {"election":"November 3, 2026 Consolidated General Election","repor
     box.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }
 
-  function drawHists(S) {
+  // every guide (rows) by which positions are counted (columns), one small histogram per cell
+  const GRID_COLS = [["all", "Everything"], ["cand", "Candidates"], ["state", "State props"], ["local", "Local measures"]];
+  function drawGrid(ds) {
     const box = $("gHist");
     box.replaceChildren();
     $("gDiverge").hidden = true;
-    for (const s of S) {
-      const fig = el("figure");
-      fig.append(el("figcaption", null, s.g.name));
-      fig.firstChild.append(el("small", null, `${s.positions} positions · average ${pct0(s.mean)} · ${fmt(s.exact)} exactly`));
-      const W = 220, H = 70, B = s.hist.length, bw = W / B, max = Math.max(...s.hist);
+    const byCat = Object.fromEntries(GRID_COLS.map(([k]) => [k, guideStats(ds, k)]));
+    box.append(el("div", "colh"));
+    for (const [, label] of GRID_COLS) box.append(el("div", "colh", label));
+    GD.guides.forEach((g, i) => {
+      const nm = el("div", "gname", g.name);
+      nm.append(el("small", null, `${byCat.all[i].positions} positions`));
+      box.append(nm);
+      for (const [k] of GRID_COLS) {
+        const s = byCat[k][i];
+        if (!s.shown || !s.n) {
+          box.append(el("div", "none", s.positions ? `Only ${s.positions} position${s.positions === 1 ? "" : "s"}` : "No positions"));
+          continue;
+        }
+        box.append(histCell(s));
+      }
+    });
+  }
+
+  function histCell(s) {
+    {
+      const fig = el("div", "cell");
+      const W = 220, H = 56, B = s.hist.length, bw = W / B, max = Math.max(...s.hist);
       const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H + 14}`, role: "group", "aria-label": `${s.g.name}: ballots by agreement` });
       s.hist.forEach((v, b) => {
         const h = v / max * H;
@@ -1153,7 +1179,8 @@ const DATA = {"election":"November 3, 2026 Consolidated General Election","repor
         const hit = svgEl("rect", { class: "hit", x: (b * bw).toFixed(1), y: 0, width: bw.toFixed(1), height: H, tabindex: 0, role: "button",
           "aria-label": `${fmt(v)} ballots followed ${binLabel(b)}. Show where they broke with ${s.g.name}.` });
         const top = b === B - 1 ? [] : divergence(s, b).slice(0, 5);
-        tipOn(hit, { big: `${fmt(v)} ballots`, a: `followed ${binLabel(b)}`, b: b === B - 1 ? s.g.name : `${s.g.name} · click for more`,
+        const on = s.cat === "all" ? "" : ` on ${CATS[s.cat]}`;
+        tipOn(hit, { big: `${fmt(v)} ballots`, a: `followed ${binLabel(b)}${on}`, b: b === B - 1 ? s.g.name : `${s.g.name} · click for more`,
           listHead: "Most often voted otherwise on", list: top.map(r => `${r.c.name}: ${pct0(r.n / v)}` + (otherWay(r.c, r.pick) ? ` voted ${otherWay(r.c, r.pick)}` : "")) });
         const pick = () => {
           document.querySelectorAll("#gHist .hit.on").forEach(n => n.classList.remove("on"));
@@ -1170,7 +1197,8 @@ const DATA = {"election":"November 3, 2026 Consolidated General Election","repor
         const t = svgEl("text", { x, y: H + 13, "text-anchor": a2, class: "tick" }); t.textContent = s2; svg.append(t);
       }
       fig.append(svg);
-      box.append(fig);
+      fig.append(el("small", null, `average ${pct0(s.mean)} · ${fmt(s.exact)} exactly`));
+      return fig;
     }
   }
 
@@ -1774,7 +1802,7 @@ const DATA = {"election":"November 3, 2026 Consolidated General Election","repor
   $("gDistrict").addEventListener("change", e => { state.district = e.target.value; render(); });
   $("gx").addEventListener("change", e => { if (e.target.value === state.gy) state.gy = state.gx; state.gx = e.target.value; render(); });
   $("gy").addEventListener("change", e => { if (e.target.value === state.gx) state.gx = state.gy; state.gy = e.target.value; render(); });
-  for (const id of ["gCatA", "gCatB"]) $(id).addEventListener("change", e => { state.cat = e.target.value; render(); });
+  $("gCatA").addEventListener("change", e => { state.cat = e.target.value; render(); });
   $("cClear").addEventListener("click", () => { state.conds = new Map(); render(); });
   $("cExample").addEventListener("click", () => { location.hash = "#coalition-9.1-49.0-57.0-64.0"; });
   $("kSel").addEventListener("change", e => { state.k = +e.target.value; render(); });
